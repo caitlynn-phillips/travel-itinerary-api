@@ -4,6 +4,11 @@ from django.core.exceptions import ValidationError
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase, APIClient
+from django.contrib.auth.models import AnonymousUser
+from rest_framework.test import APIRequestFactory
+from itineraries.permissions import (
+    IsTripOwner, IsTripOwnerOrCollaborator, CanEditItinerary
+)
 
 from destinations.models import Destination
 from itineraries.models import Itinerary, DailyPlan, Collaboration
@@ -191,3 +196,69 @@ class ItineraryTests(APITestCase):
         detail_url = reverse('itinerary-detail', kwargs={'pk': self.itinerary.pk})
         res = self.client.patch(detail_url, {'title': 'Hacked Title'})
         self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class ItineraryPermissionTests(APITestCase):
+    """
+    Direct tests for the custom itinerary permission classes.
+    """
+
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.owner = User.objects.create_user(username='powner', email='powner@example.com', password='Password123!')
+        self.editor = User.objects.create_user(username='peditor', email='peditor@example.com', password='Password123!')
+        self.viewer = User.objects.create_user(username='pviewer', email='pviewer@example.com', password='Password123!')
+        self.stranger = User.objects.create_user(username='pstranger', email='pstranger@example.com', password='Password123!')
+
+        destination = Destination.objects.create(
+            name='Lisbon',
+            country='Portugal',
+            description='Hilly coastal capital.',
+            category=Destination.CategoryChoices.CITY,
+            climate=Destination.ClimateChoices.TEMPERATE,
+            best_time_to_visit='Autumn',
+            avg_daily_cost=120.00,
+        )
+        self.itinerary = Itinerary.objects.create(
+            title='Lisbon Trip',
+            destination=destination,
+            owner=self.owner,
+            start_date=date.today() + timedelta(days=5),
+            end_date=date.today() + timedelta(days=9),
+            budget=1500.00,
+        )
+        Collaboration.objects.create(itinerary=self.itinerary, user=self.editor, role='editor')
+        Collaboration.objects.create(itinerary=self.itinerary, user=self.viewer, role='viewer')
+
+    def _request(self, method, user):
+        """Build a request of the given HTTP method with the given user attached."""
+        request = getattr(self.factory, method)('/')
+        request.user = user
+        return request
+
+    def test_is_trip_owner(self):
+        """Only the owner passes IsTripOwner."""
+        perm = IsTripOwner()
+        self.assertTrue(perm.has_object_permission(self._request('patch', self.owner), None, self.itinerary))
+        self.assertFalse(perm.has_object_permission(self._request('patch', self.editor), None, self.itinerary))
+        self.assertFalse(perm.has_object_permission(self._request('get', AnonymousUser()), None, self.itinerary))
+
+    def test_owner_or_collaborator_read_and_write(self):
+        """Collaborators can read but not write; strangers and anonymous users cannot do either."""
+        perm = IsTripOwnerOrCollaborator()
+        self.assertTrue(perm.has_object_permission(self._request('get', self.editor), None, self.itinerary))
+        self.assertTrue(perm.has_object_permission(self._request('get', self.viewer), None, self.itinerary))
+        self.assertFalse(perm.has_object_permission(self._request('get', self.stranger), None, self.itinerary))
+        self.assertTrue(perm.has_object_permission(self._request('patch', self.owner), None, self.itinerary))
+        self.assertFalse(perm.has_object_permission(self._request('patch', self.editor), None, self.itinerary))
+        self.assertFalse(perm.has_object_permission(self._request('get', AnonymousUser()), None, self.itinerary))
+
+    def test_can_edit_itinerary_by_role(self):
+        """Editors can write, viewers can only read, strangers and anonymous users are blocked."""
+        perm = CanEditItinerary()
+        self.assertTrue(perm.has_object_permission(self._request('patch', self.owner), None, self.itinerary))
+        self.assertTrue(perm.has_object_permission(self._request('patch', self.editor), None, self.itinerary))
+        self.assertFalse(perm.has_object_permission(self._request('patch', self.viewer), None, self.itinerary))
+        self.assertTrue(perm.has_object_permission(self._request('get', self.viewer), None, self.itinerary))
+        self.assertFalse(perm.has_object_permission(self._request('get', self.stranger), None, self.itinerary))
+        self.assertFalse(perm.has_object_permission(self._request('patch', AnonymousUser()), None, self.itinerary))
