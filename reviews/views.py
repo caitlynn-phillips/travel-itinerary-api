@@ -8,6 +8,7 @@ from .models import Review
 from .filters import ReviewFilter
 from .permissions import IsReviewOwnerOrReadOnly
 from .serializers import ReviewSerializer
+from travel_api.pagination import StandardResultsSetPagination
 
 
 class ReviewViewSet(viewsets.ModelViewSet):
@@ -18,6 +19,7 @@ class ReviewViewSet(viewsets.ModelViewSet):
     queryset = Review.objects.select_related('user', 'destination', 'accommodation', 'activity').all()
     serializer_class = ReviewSerializer
     permission_classes = [IsAuthenticatedOrReadOnly, IsReviewOwnerOrReadOnly]
+    pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class = ReviewFilter
     search_fields = ['title', 'content', 'destination__name', 'accommodation__name', 'activity__name']

@@ -97,3 +97,20 @@ class ReviewTests(APITestCase):
         # PATCH should fail (forbidden)
         patch_res = self.client.patch(detail_url, {'title': 'Hacked Title'})
         self.assertEqual(patch_res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_review_list_custom_page_size(self):
+        """Test StandardResultsSetPagination honors ?page_size=."""
+        Review.objects.create(
+            user=self.other_user,
+            destination=self.destination,
+            rating=4,
+            title='Second Review',
+            content='Another review to exercise pagination.',
+            visit_date=date.today(),
+        )
+        url = reverse('review-list')
+        res = self.client.get(url, {'page_size': 1})
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['count'], 2)
+        self.assertEqual(len(res.data['results']), 1)
+        self.assertIsNotNone(res.data['next'])
