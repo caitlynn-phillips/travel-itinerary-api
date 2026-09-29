@@ -1,11 +1,8 @@
-"""
-URL routes for the destinations app.
-"""
-
 from django.urls import path
+from .views import DestinationSearchView
 
 app_name = 'destinations'
 
 urlpatterns = [
-    # e.g. path('example/', views.example_view, name='example'),
+    path('search-advanced/', DestinationSearchView.as_view(), name='destination-search-advanced'),
 ]

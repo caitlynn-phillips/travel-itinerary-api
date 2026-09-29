@@ -1,18 +1,11 @@
-"""
-Models for the destinations app.
-"""
-
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
-from django.db.models import Avg
-from django.utils.text import slugify
 
 
 class Destination(models.Model):
     """
-    A tourist destination that itineraries, accommodations,
-    activities and reviews attach to.
+    Tourist destination with details and ratings.
     """
 
     class ClimateChoices(models.TextChoices):
@@ -30,83 +23,56 @@ class Destination(models.Model):
         ADVENTURE = 'adventure', 'Adventure'
         RELAXATION = 'relaxation', 'Relaxation'
 
-    name = models.CharField(max_length=200, unique=True, help_text='Destination name, e.g. Paris.')
-    slug = models.SlugField(
-        max_length=220,
-        unique=True,
-        blank=True,
-        help_text='URL-friendly name. Generated automatically from the name.',
+    name = models.CharField(max_length=200, unique=True, help_text="Destination name.")
+    country = models.CharField(max_length=100, help_text="Country where destination is located.")
+    description = models.TextField(help_text="Detailed description of the destination.")
+    category = models.CharField(
+        max_length=20,
+        choices=CategoryChoices.choices,
+        help_text="Category/type of destination.",
     )
-    country = models.CharField(max_length=100)
-    description = models.TextField()
-    category = models.CharField(max_length=20, choices=CategoryChoices.choices)
-    climate = models.CharField(max_length=20, choices=ClimateChoices.choices)
-    best_time_to_visit = models.CharField(max_length=200)
+    climate = models.CharField(
+        max_length=20,
+        choices=ClimateChoices.choices,
+        help_text="Climate zone.",
+    )
+    best_time_to_visit = models.CharField(max_length=200, help_text="Optimal months/seasons to visit.")
     avg_daily_cost = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         validators=[MinValueValidator(0)],
-        help_text='Average daily cost per traveler.',
+        help_text="Estimated average daily cost per person.",
     )
     image = models.ImageField(upload_to='destinations/', null=True, blank=True)
-    latitude = models.DecimalField(
-        max_digits=9,
-        decimal_places=6,
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(-90), MaxValueValidator(90)],
-    )
-    longitude = models.DecimalField(
-        max_digits=9,
-        decimal_places=6,
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(-180), MaxValueValidator(180)],
-    )
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['name']
+        verbose_name = 'Destination'
+        verbose_name_plural = 'Destinations'
         indexes = [
             models.Index(fields=['country', 'category']),
             models.Index(fields=['climate']),
-            models.Index(fields=['avg_daily_cost']),
-            models.Index(fields=['is_active']),
         ]
 
     def __str__(self):
         return f"{self.name}, {self.country}"
 
     def clean(self):
-        """Latitude and longitude must be given together or not at all."""
-        if (self.latitude is None) != (self.longitude is None):
-            raise ValidationError('Provide both latitude and longitude, or neither.')
-
-    def save(self, *args, **kwargs):
-        """Generate a unique slug from the name the first time we save."""
-        if not self.slug:
-            base_slug = slugify(self.name)
-            slug = base_slug
-            counter = 2
-            while Destination.objects.filter(slug=slug).exclude(pk=self.pk).exists():
-                slug = f"{base_slug}-{counter}"
-                counter += 1
-            self.slug = slug
-        super().save(*args, **kwargs)
+        """Model validation for coordinates and costs."""
+        if self.latitude is not None and (self.latitude < -90 or self.latitude > 90):
+            raise ValidationError({'latitude': 'Latitude must be between -90 and 90 degrees.'})
+        if self.longitude is not None and (self.longitude < -180 or self.longitude > 180):
+            raise ValidationError({'longitude': 'Longitude must be between -180 and 180 degrees.'})
+        if self.avg_daily_cost is not None and self.avg_daily_cost < 0:
+            raise ValidationError({'avg_daily_cost': 'Average daily cost cannot be negative.'})
 
     @property
     def average_rating(self):
-        """Average review rating, rounded to one decimal, or 0 if unreviewed."""
-        result = self.reviews.aggregate(avg=Avg('rating'))['avg']
-        return round(result, 1) if result else 0
-
-    @property
-    def budget_category(self):
-        """Label the destination as budget, moderate or luxury by daily cost."""
-        if self.avg_daily_cost < 100:
-            return 'budget'
-        if self.avg_daily_cost < 250:
-            return 'moderate'
-        return 'luxury'
+        """Calculates average rating from associated reviews."""
+        ratings = self.reviews.aggregate(models.Avg('rating'))
+        return round(ratings['rating__avg'] or 0.0, 2)

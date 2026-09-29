@@ -1,14 +1,7 @@
-"""
-Views for the accounts app: registration, login, profile,
-password change and password reset.
-"""
-
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.tokens import default_token_generator
-from django.core.mail import send_mail
 from django.utils.encoding import force_bytes, force_str
-from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from drf_spectacular.utils import extend_schema
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -28,162 +21,124 @@ from .serializers import (
 User = get_user_model()
 
 
-def get_tokens_for_user(user):
-    """Return a refresh/access JWT pair for the given user."""
-    refresh = RefreshToken.for_user(user)
-    return {
-        'refresh': str(refresh),
-        'access': str(refresh.access_token),
-    }
-
-
-@extend_schema(request=UserRegistrationSerializer, responses={201: UserSerializer})
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register(request):
     """
-    Register a new user and return their profile plus JWT tokens.
-
-    Example request:
-        POST /api/v1/accounts/register/
-        {"username": "cait", "email": "cait@example.com",
-         "password": "StrongPass123", "password2": "StrongPass123"}
+    User registration endpoint. Returns registered user details and JWT tokens.
     """
     serializer = UserRegistrationSerializer(data=request.data)
     if serializer.is_valid():
         user = serializer.save()
-        return Response(
-            {'user': UserSerializer(user).data, 'tokens': get_tokens_for_user(user)},
-            status=status.HTTP_201_CREATED,
-        )
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'user': UserSerializer(user).data,
+            'tokens': {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            }
+        }, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@extend_schema(request=LoginSerializer, responses={200: UserSerializer})
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login(request):
     """
-    Log in with username and password and return the profile plus JWT tokens.
-
-    Example request:
-        POST /api/v1/accounts/login/
-        {"username": "cait", "password": "StrongPass123"}
+    User login endpoint. Validates credentials and returns JWT token pair.
     """
     serializer = LoginSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    user = authenticate(
-        request=request,
-        username=serializer.validated_data['username'],
-        password=serializer.validated_data['password'],
-    )
-    if user is None:
-        return Response(
-            {'error': 'Invalid credentials'},
-            status=status.HTTP_401_UNAUTHORIZED,
+    if serializer.is_valid():
+        user = authenticate(
+            username=serializer.validated_data['username'],
+            password=serializer.validated_data['password'],
         )
-    return Response({'user': UserSerializer(user).data, 'tokens': get_tokens_for_user(user)})
+        if user:
+            refresh = RefreshToken.for_user(user)
+            return Response({
+                'user': UserSerializer(user).data,
+                'tokens': {
+                    'refresh': str(refresh),
+                    'access': str(refresh.access_token),
+                }
+            })
+        return Response({'error': 'Invalid username or password.'}, status=status.HTTP_401_UNAUTHORIZED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class UserProfileView(generics.RetrieveUpdateAPIView):
     """
-    Get or update the logged-in user's profile.
-
-    GET /api/v1/accounts/profile/ returns the profile.
-    PATCH /api/v1/accounts/profile/ updates any of its fields.
+    Retrieve or update the logged-in user's profile details.
     """
-
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
-        """A user can only ever see and edit their own profile."""
         return self.request.user
 
 
-class ChangePasswordView(APIView):
-    """Change the logged-in user's password."""
-
+class PasswordChangeView(APIView):
+    """
+    Endpoint for authenticated users to change their account password.
+    """
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(request=ChangePasswordSerializer, responses={200: None})
     def post(self, request):
-        """
-        Example request:
-            POST /api/v1/accounts/password/change/
-            {"old_password": "StrongPass123", "new_password": "EvenStronger456"}
-        """
         serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
-            request.user.set_password(serializer.validated_data['new_password'])
-            request.user.save()
-            return Response({'detail': 'Password changed successfully.'})
+            user = request.user
+            user.set_password(serializer.validated_data['new_password'])
+            user.save()
+            return Response({'detail': 'Password changed successfully.'}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@extend_schema(request=PasswordResetRequestSerializer, responses={200: None})
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def password_reset_request(request):
+class PasswordResetRequestView(APIView):
     """
-    Start a password reset by emailing the user a uid and token.
+    Step 1 of password reset: request password reset token via email.
+    """
+    permission_classes = [AllowAny]
 
-    Always returns the same message whether or not the email exists,
-    so attackers cannot use this endpoint to discover registered emails.
-    """
-    serializer = PasswordResetRequestSerializer(data=request.data)
-    if not serializer.is_valid():
+    def post(self, request):
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        if serializer.is_valid():
+            email = serializer.validated_data['email']
+            user = User.objects.filter(email__iexact=email).first()
+            if user:
+                uid = urlsafe_base64_encode(force_bytes(user.pk))
+                token = default_token_generator.make_token(user)
+                # In development, return reset tokens in response for easy testing
+                return Response({
+                    'detail': 'Password reset token generated.',
+                    'uid': uid,
+                    'token': token,
+                }, status=status.HTTP_200_OK)
+            return Response({'detail': 'If that email exists, a reset link was sent.'}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    generic_response = Response(
-        {'detail': 'If that email is registered, a reset link has been sent.'}
-    )
-    try:
-        user = User.objects.get(email__iexact=serializer.validated_data['email'])
-    except User.DoesNotExist:
-        return generic_response
 
-    uid = urlsafe_base64_encode(force_bytes(user.pk))
-    token = default_token_generator.make_token(user)
-    send_mail(
-        subject='Password reset',
-        message=f'Use these to reset your password.\nuid: {uid}\ntoken: {token}',
-        from_email=None,  # falls back to DEFAULT_FROM_EMAIL
-        recipient_list=[user.email],
-    )
-    return generic_response
-
-
-@extend_schema(request=PasswordResetConfirmSerializer, responses={200: None})
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def password_reset_confirm(request):
+class PasswordResetConfirmView(APIView):
     """
-    Finish a password reset using the uid and token from the reset email.
-
-    Example request:
-        POST /api/v1/accounts/password/reset/confirm/
-        {"uid": "MQ", "token": "abc123-xyz", "new_password": "EvenStronger456"}
+    Step 2 of password reset: confirm reset token and set new password.
     """
-    serializer = PasswordResetConfirmSerializer(data=request.data)
-    if not serializer.is_valid():
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        if serializer.is_valid():
+            uid = serializer.validated_data['uid']
+            token = serializer.validated_data['token']
+            new_password = serializer.validated_data['new_password']
+
+            try:
+                user_id = force_str(urlsafe_base64_decode(uid))
+                user = User.objects.get(pk=user_id)
+            except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+                return Response({'error': 'Invalid user ID.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            if default_token_generator.check_token(user, token):
+                user.set_password(new_password)
+                user.save()
+                return Response({'detail': 'Password has been reset successfully.'}, status=status.HTTP_200_OK)
+            return Response({'error': 'Invalid or expired reset token.'}, status=status.HTTP_400_BAD_REQUEST)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    invalid_link = Response(
-        {'error': 'Invalid or expired reset link.'},
-        status=status.HTTP_400_BAD_REQUEST,
-    )
-    try:
-        user_id = force_str(urlsafe_base64_decode(serializer.validated_data['uid']))
-        user = User.objects.get(pk=user_id)
-    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
-        return invalid_link
-
-    if not default_token_generator.check_token(user, serializer.validated_data['token']):
-        return invalid_link
-
-    user.set_password(serializer.validated_data['new_password'])
-    user.save()
-    return Response({'detail': 'Password has been reset.'})

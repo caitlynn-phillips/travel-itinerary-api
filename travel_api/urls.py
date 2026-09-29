@@ -1,40 +1,50 @@
-"""
-travel_api URL Configuration.
-
-All API routes are versioned under /api/v1/. ViewSet routes are registered
-on a single DefaultRouter; app-specific function-based and class-based
-views live under their own namespaced app urls.py files.
-"""
-
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import path, include
 from drf_spectacular.views import (
     SpectacularAPIView,
-    SpectacularRedocView,
     SpectacularSwaggerView,
+    SpectacularRedocView,
 )
 from rest_framework.routers import DefaultRouter
 
+from destinations.views import DestinationViewSet
+from itineraries.views import ItineraryViewSet
+from bookings.views import BookingViewSet, AccommodationViewSet, ActivityViewSet
+from reviews.views import ReviewViewSet
+from budgets.views import BudgetViewSet, ExpenseViewSet, TripAnalyticsViewSet
+
 router = DefaultRouter()
-# ViewSets are registered here as each app implements them, e.g.:
-# router.register(r'itineraries', ItineraryViewSet, basename='itinerary')
+router.register(r'itineraries', ItineraryViewSet, basename='itinerary')
+router.register(r'destinations', DestinationViewSet, basename='destination')
+router.register(r'accommodations', AccommodationViewSet, basename='accommodation')
+router.register(r'activities', ActivityViewSet, basename='activity')
+router.register(r'bookings', BookingViewSet, basename='booking')
+router.register(r'reviews', ReviewViewSet, basename='review')
+router.register(r'budgets', BudgetViewSet, basename='budget')
+router.register(r'expenses', ExpenseViewSet, basename='expense')
+router.register(r'analytics', TripAnalyticsViewSet, basename='analytics')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
 
-    # Versioned API root — ViewSet routes
+    # API Documentation (Swagger & ReDoc)
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+
+    # API v1 Router Endpoints
     path('api/v1/', include(router.urls)),
 
-    # App-level routes (function-based + class-based views)
+    # App-Specific Endpoints
     path('api/v1/accounts/', include('accounts.urls')),
     path('api/v1/destinations/', include('destinations.urls')),
     path('api/v1/itineraries/', include('itineraries.urls')),
     path('api/v1/bookings/', include('bookings.urls')),
     path('api/v1/reviews/', include('reviews.urls')),
     path('api/v1/budgets/', include('budgets.urls')),
-
-    # API documentation
-    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
-    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
-    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
