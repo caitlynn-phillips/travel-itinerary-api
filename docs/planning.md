@@ -3,7 +3,6 @@
 ## ERD (entity relationships)
 
 ```
-User (accounts) ──1:1──> Budget is via Itinerary, not User
 User ──1:M──> Itinerary (owner)
 User ──M:M──> Itinerary (collaborators, through Collaboration)
 Itinerary ──1:M──> DailyPlan
@@ -34,18 +33,18 @@ Core apps: `accounts`, `destinations`, `itineraries` (Itinerary, DailyPlan, Coll
 | GET/PATCH | `/api/v1/accounts/profile/` | View/update own profile |
 | POST | `/api/v1/accounts/password/change/` | Change password |
 | POST | `/api/v1/accounts/password/reset/`, `/password/reset/confirm/` | Reset flow |
-| GET | `/api/v1/destinations/` (ViewSet) | Browse/search/filter destinations |
+| GET | `/api/v1/destinations/`, `search-advanced/` | Browse/filter, ranked search |
 | GET | `/api/v1/destinations/{id}/popular_activities/`, `/weather_info/` | Custom actions |
 | GET/POST | `/api/v1/itineraries/` (ViewSet) | List own+shared / create itinerary |
 | GET/PATCH/DELETE | `/api/v1/itineraries/{id}/` | Retrieve/update/delete |
 | POST/GET | `/api/v1/itineraries/{id}/duplicate/`, `/share/`, `/export_pdf/`, `/upcoming/` | Custom actions |
 | GET/POST | `/api/v1/itineraries/search/` (FBV) | Custom ranked search |
 | GET | `/api/v1/itineraries/{id}/report/` (FBV) | Aggregated trip report |
-| POST | `/api/v1/itineraries/bulk-update/` (FBV) | Bulk booking updates |
+| POST | `/api/v1/bookings/bulk-update/` (FBV) | Bulk booking updates |
 | POST/PATCH/DELETE | `/api/v1/itineraries/{id}/collaborators/` (CBV) | Manage collaborators |
 | CRUD | `/api/v1/bookings/` (ViewSet) | Accommodation/activity bookings |
 | POST | `/api/v1/bookings/{id}/confirm/`, `/cancel/` | Custom actions |
-| CRUD | `/api/v1/reviews/` (ViewSet) | Reviews/ratings |
+| CRUD | `/api/v1/reviews/` (ViewSet), `{id}/helpful/` | Reviews/ratings |
 | GET | `/api/v1/budgets/`, `/expenses/` | Budget + expense tracking |
 | GET | `/api/v1/analytics/`, `/analytics/budget_summary/` | Trip analytics ViewSet |
 | GET | `/api/docs/`, `/api/redoc/` | Swagger / ReDoc |
@@ -73,7 +72,7 @@ Enforced via `IsAuthenticated`, `IsTripOwner`, `IsTripOwnerOrCollaborator`, `Can
 
 ## URL structure
 
-Everything is namespaced and versioned: `/api/v1/<app>/...`, with `app_name` set per app and ViewSets registered on one shared `DefaultRouter`. Nested resources (e.g. collaborators under an itinerary, expenses under a budget) use path converters like `<int:trip_id>`.
+Everything is namespaced and versioned: `/api/v1/<app>/...`, with `app_name` set per app and ViewSets registered on one shared `DefaultRouter`. Nested resources (e.g. collaborators under an itinerary) use path converters like `<int:trip_id>`.
 
 ## Testing strategy
 
