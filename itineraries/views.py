@@ -1,3 +1,5 @@
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import serializers as drf_serializers
 from datetime import date
 from django.db import transaction
 from django.db.models import Q, Count, Sum, F, Prefetch
@@ -163,6 +165,13 @@ class ItineraryViewSet(viewsets.ModelViewSet):
 # Function-Based Views (FBVs)
 # --------------------------------------------------------------------------
 
+@extend_schema(
+    methods=['POST'],
+    request=inline_serializer(
+        name='SearchPreferenceRequest',
+        fields={'preference': drf_serializers.JSONField()},
+    ),
+)
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def trip_search(request):

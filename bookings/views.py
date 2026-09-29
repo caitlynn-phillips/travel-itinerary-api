@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema
 from django.db import transaction
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets, status, generics, filters
@@ -111,6 +112,7 @@ class BookingDetailView(generics.RetrieveUpdateDestroyAPIView):
         )
 
 
+@extend_schema(request=BulkBookingUpdateSerializer)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def bulk_update_bookings(request):
