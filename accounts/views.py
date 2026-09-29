@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.encoding import force_bytes, force_str
@@ -21,6 +22,7 @@ from .serializers import (
 User = get_user_model()
 
 
+@extend_schema(request=UserRegistrationSerializer)
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register(request):
@@ -41,6 +43,7 @@ def register(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(request=LoginSerializer)
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login(request):
