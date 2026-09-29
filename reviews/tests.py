@@ -78,6 +78,7 @@ class ReviewTests(APITestCase):
 
     def test_review_helpful_action(self):
         """Test marking review as helpful."""
+        self.client.force_authenticate(user=self.other_user)
         url = reverse('review-helpful', kwargs={'pk': self.review.pk})
         res = self.client.post(url)
         self.assertEqual(res.status_code, status.HTTP_200_OK)

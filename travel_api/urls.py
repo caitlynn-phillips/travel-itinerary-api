@@ -34,9 +34,6 @@ urlpatterns = [
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 
-    # API v1 Router Endpoints
-    path('api/v1/', include(router.urls)),
-
     # App-Specific Endpoints
     path('api/v1/accounts/', include('accounts.urls')),
     path('api/v1/destinations/', include('destinations.urls')),
@@ -44,6 +41,9 @@ urlpatterns = [
     path('api/v1/bookings/', include('bookings.urls')),
     path('api/v1/reviews/', include('reviews.urls')),
     path('api/v1/budgets/', include('budgets.urls')),
+
+    # API v1 Router Endpoints (last, so the specific paths above match first)
+    path('api/v1/', include(router.urls)),
 ]
 
 if settings.DEBUG:
