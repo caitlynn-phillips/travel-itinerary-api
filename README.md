@@ -103,6 +103,8 @@ Swagger.
 
 ## Project structure
 
+ERD diagram: [docs/erd.md](docs/erd.md)
+
 See `docs/planning.md` for the ERD, endpoint list, auth flow, and permission
 matrix. Apps: `accounts`, `destinations`, `itineraries`, `bookings`,
 `reviews`, `budgets`, each with its own `models.py`, `serializers.py`,
